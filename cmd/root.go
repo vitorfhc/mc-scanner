@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"bufio"
+	"fmt"
 	"os"
+	"sync"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/vitorfhc/mc-scanner/mcscanner"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -12,7 +17,62 @@ var rootCmd = &cobra.Command{
 	Short: "Scan multiple Minecraft servers in seconds",
 	Long: `The mc-scanner scans multiple Minecraft servers async.
 All you need is a list of available addresses in the format <address>:<port>.`,
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Run: func(cmd *cobra.Command, args []string) {
+		if GlobalCliParams.Debug {
+			logrus.Debug("Debug mode is activated")
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+
+		filename := GlobalCliParams.AddrListFile
+		file, err := os.Open(filename)
+		if err != nil {
+			logrus.Fatalf("Could not open file %q: %v\n", filename, err)
+		}
+		defer file.Close()
+
+		var addresses []string
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			addresses = append(addresses, scanner.Text())
+		}
+
+		// timeout := GlobalCliParams.Timeout
+		maxJobs := GlobalCliParams.MaxJobs
+		addrsChan := make(chan string, maxJobs)
+		defer close(addrsChan)
+		resultsChan := make(chan *mcscanner.PingAndListResponse)
+		defer close(resultsChan)
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+		go func() {
+			for _, addr := range addresses {
+				addrsChan <- addr
+			}
+			wg.Done()
+		}()
+
+		wg.Add(1)
+		go func() {
+			mcscanner.RunAsyncScanner(addrsChan, resultsChan)
+			wg.Done()
+		}()
+
+		wg.Add(1)
+		go func() {
+			for {
+				select {
+				case res := <-resultsChan:
+					logrus.Println(res)
+					fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
+				default:
+					continue
+				}
+			}
+		}()
+
+		wg.Wait()
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -25,13 +85,8 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.scanner.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.Flags().StringVarP(&GlobalCliParams.AddrListFile, "file", "f", "addresses.txt", "Name of the file containing a list of addresses in <address>:<port> format")
+	rootCmd.Flags().IntVarP(&GlobalCliParams.MaxJobs, "max-jobs", "j", 10, "Hard limit of connections to try at the same time")
+	rootCmd.Flags().IntVarP(&GlobalCliParams.Timeout, "timeout", "t", 10, "Time limit to wait for the server response in seconds")
+	rootCmd.Flags().BoolVarP(&GlobalCliParams.Debug, "debug", "d", false, "Enables debug logging")
 }
