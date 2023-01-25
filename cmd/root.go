@@ -46,19 +46,19 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for _, addr := range addresses {
 				addrsChan <- addr
 			}
-			wg.Done()
 		}()
 
 		wg.Add(1)
 		go func() {
-			mcscanner.RunAsyncScanner(addrsChan, resultsChan)
-			wg.Done()
+			defer wg.Done()
+			mcscanner.RunAsyncScannerController(addrsChan, resultsChan)
 		}()
 
-		wg.Add(1)
+		wg.Add(1) // TODO improve this
 		go func() {
 			for {
 				select {

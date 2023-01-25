@@ -7,8 +7,8 @@ import (
 	"github.com/Tnze/go-mc/bot"
 )
 
-func RunAsyncScanner(addressesChan chan string, resultsChan chan *PingAndListResponse) {
-	maxWait := 4
+func RunAsyncScannerController(addressesChan chan string, resultsChan chan *PingAndListResponse) {
+	maxWait := 4 // TODO improve this
 	currWait := 0
 	for {
 		select {
