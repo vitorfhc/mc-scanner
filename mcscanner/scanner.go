@@ -2,34 +2,30 @@ package mcscanner
 
 import (
 	"encoding/json"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Tnze/go-mc/bot"
 )
 
 func RunAsyncScannerController(addressesChan chan string, resultsChan chan *PingAndListResponse) {
-	maxWait := 4 // TODO improve this
-	currWait := 0
-	for {
-		select {
-		case addr := <-addressesChan:
-			currWait = 0
-			go func() {
-				res, err := ScanAddress(addr, 10)
-				if err != nil {
-					return
-				}
-				resultsChan <- res
-			}()
-		default:
-			if currWait >= maxWait {
+	errors := 0
+	var wg sync.WaitGroup
+	for addr := range addressesChan {
+		wg.Add(1)
+		go func(scanAddr string) {
+			defer wg.Done()
+			res, err := ScanAddress(scanAddr, 10)
+			if err != nil {
+				errors++
 				return
 			}
-			currWait = currWait + 1
-			time.Sleep(time.Duration(500) * time.Millisecond)
-			continue
-		}
+			resultsChan <- res
+		}(addr)
 	}
+	wg.Wait()
+	fmt.Println(errors)
 }
 
 func ScanAddress(addr string, timeout int) (*PingAndListResponse, error) {

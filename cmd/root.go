@@ -39,9 +39,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		// timeout := GlobalCliParams.Timeout
 		maxJobs := GlobalCliParams.MaxJobs
 		addrsChan := make(chan string, maxJobs)
-		defer close(addrsChan)
 		resultsChan := make(chan *mcscanner.PingAndListResponse)
-		defer close(resultsChan)
 		var wg sync.WaitGroup
 
 		wg.Add(1)
@@ -50,24 +48,21 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 			for _, addr := range addresses {
 				addrsChan <- addr
 			}
+			close(addrsChan)
 		}()
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			mcscanner.RunAsyncScannerController(addrsChan, resultsChan)
+			close(resultsChan)
 		}()
 
-		wg.Add(1) // TODO improve this
+		wg.Add(1)
 		go func() {
-			for {
-				select {
-				case res := <-resultsChan:
-					logrus.Println(res)
-					fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
-				default:
-					continue
-				}
+			defer wg.Done()
+			for res := range resultsChan {
+				fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
 			}
 		}()
 
