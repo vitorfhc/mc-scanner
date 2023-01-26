@@ -1,5 +1,12 @@
 package mcscanner
 
+type Options struct {
+	InputChan   chan string
+	ResultsChan chan *PingAndListResponse
+	Timeout     int
+	MaxJobs     int
+}
+
 type PingAndListResponse struct {
 	Address     string
 	Players     PlayersInfo     `json:"players"`

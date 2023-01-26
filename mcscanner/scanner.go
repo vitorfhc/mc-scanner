@@ -1,6 +1,7 @@
 package mcscanner
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"time"
@@ -9,33 +10,51 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func RunAsyncScannerController(addressesChan chan string, resultsChan chan *PingAndListResponse, maxJobs int) {
+func RunAsyncScannerController(options Options) {
 	errors := 0
 	success := 0
+
 	var wg sync.WaitGroup
-	limit := make(chan bool, maxJobs)
-	for addr := range addressesChan {
-		wg.Add(1)
+
+	go func() {
+		for {
+			logrus.Infof("Processed:\t%d\n", errors+success)
+			logrus.Infof("Error:\t%d\n", errors)
+			logrus.Infof("Success:\t%d\n", success)
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
+	limit := make(chan bool, options.MaxJobs)
+
+	for addr := range options.InputChan {
 		limit <- true
+		wg.Add(1)
+
 		go func(scanAddr string) {
 			defer func() { <-limit; wg.Done() }()
-			res, err := ScanAddress(scanAddr, 10)
+
+			bgCtx := context.Background()
+			timeoutDuration := time.Duration(options.Timeout) * time.Second
+			ctx, cancel := context.WithTimeout(bgCtx, timeoutDuration)
+			defer cancel()
+
+			res, err := ScanAddress(ctx, scanAddr)
 			if err != nil {
-				logrus.Errorf("Error on address %q: %v\n", scanAddr, err)
+				// logrus.Errorf("Error on address %q: %v\n", scanAddr, err)
 				errors++
 				return
 			}
 			success++
-			resultsChan <- res
+
+			options.ResultsChan <- res
 		}(addr)
 	}
 	wg.Wait()
-	logrus.Warnf("Error on %d addresses\n", errors)
-	logrus.Infof("Found %d servers\n", success)
 }
 
-func ScanAddress(addr string, timeout int) (*PingAndListResponse, error) {
-	bytes, _, err := bot.PingAndListTimeout(addr, time.Duration(timeout)*time.Second)
+func ScanAddress(ctx context.Context, addr string) (*PingAndListResponse, error) {
+	bytes, _, err := bot.PingAndListContext(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +64,6 @@ func ScanAddress(addr string, timeout int) (*PingAndListResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	res.Address = addr
 
 	return &res, nil
