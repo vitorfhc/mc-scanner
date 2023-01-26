@@ -8,6 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/vitorfhc/mc-scanner/mclog"
 	"github.com/vitorfhc/mc-scanner/mcscanner"
 )
 
@@ -17,18 +18,24 @@ var rootCmd = &cobra.Command{
 	Long: `The mc-scanner scans multiple Minecraft servers async.
 All you need is a list of available addresses in the format <address>:<port>.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Initialize logger
+		logger, err := mclog.New()
+		if err != nil {
+			logrus.Fatalf("Could not setup logger: %s\n", err)
+		}
+
 		// Enable debug mode
 		if GlobalCliParams.Debug {
-			logrus.Debug("Debug mode is activated")
-			logrus.SetLevel(logrus.DebugLevel)
+			logger.Debug("Debug mode is activated")
+			logger.SetLevel(logrus.DebugLevel)
 		}
 
 		// Open the file with addresses
 		filename := GlobalCliParams.AddrListFile
-		logrus.Debugf("Opening file %q\n", filename)
+		logger.Debugf("Opening file %q\n", filename)
 		file, err := os.Open(filename)
 		if err != nil {
-			logrus.Fatalf("Could not open file %q: %s\n", filename, err)
+			logger.Fatalf("Could not open file %q: %s\n", filename, err)
 		}
 		defer file.Close()
 
@@ -40,7 +47,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logrus.Debug("Starting to populate the input channel")
+			logger.Debug("Starting to populate the input channel")
 			for scanner.Scan() {
 				addrsChan <- scanner.Text()
 			}
@@ -59,7 +66,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logrus.Debug("Starting scanner")
+			logger.Debug("Starting scanner")
 			mcscanner.RunScanJobs(options)
 			close(resultsChan)
 		}()
