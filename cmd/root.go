@@ -54,7 +54,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			mcscanner.RunAsyncScannerController(addrsChan, resultsChan)
+			mcscanner.RunAsyncScannerController(addrsChan, resultsChan, maxJobs)
 			close(resultsChan)
 		}()
 
