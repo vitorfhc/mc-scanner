@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"os"
 	"sync"
 
@@ -17,26 +19,15 @@ var rootCmd = &cobra.Command{
 All you need is a list of available addresses in the format <address>:<port>.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Initialize logger
-		// dir, err := os.MkdirTemp("", "mc-scanner-*")
-		// if err != nil {
-		// 	logrus.Fatal(err)
-		// }
-		// logFile := path.Join(dir, "scan.log")
-
-		// logWriter, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0400)
-		// if err != nil {
-		// 	logrus.Fatal(err)
-		// }
-		// defer logWriter.Close()
-
 		if GlobalCliParams.Debug {
+			logrus.SetReportCaller(true)
 			logrus.Debug("Debug mode is activated")
 			logrus.SetLevel(logrus.DebugLevel)
 		}
 
 		// Open the file with addresses
 		filename := GlobalCliParams.AddrListFile
-		logrus.Debugf("Opening file %q\n", filename)
+		logrus.Infof("Opening file %q\n", filename)
 		file, err := os.Open(filename)
 		if err != nil {
 			logrus.Fatalf("Could not open file %q: %s\n", filename, err)
@@ -44,6 +35,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		defer file.Close()
 
 		var wg sync.WaitGroup
+		cmdCtx := cmd.Context()
 
 		// Create the input and output channel
 		addrsChan := make(chan string)
@@ -51,9 +43,16 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logrus.Debug("Starting to populate the input channel")
-			for scanner.Scan() {
-				addrsChan <- scanner.Text()
+			logrus.Info("Reading ", filename)
+			for {
+				select {
+				case <-cmdCtx.Done():
+					logrus.Info("Stopping file reading")
+					close(addrsChan) // TODO
+					return
+				default:
+					addrsChan <- scanner.Text()
+				}
 			}
 		}()
 		resultsChan := make(chan *mcscanner.PingAndListResponse)
@@ -70,29 +69,24 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logrus.Debug("Starting scanner")
-			mcscanner.RunScanJobs(options)
+			logrus.Info("Starting scanner")
+			mcscanner.RunScanJobs(cmdCtx, options)
 			close(resultsChan)
 		}()
 
-		// // Get all the incoming results
-		// for res := range resultsChan {
-		// 	fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
-		// }
-
-		// logrus.SetOutput(logWriter)
-		// err = gui.Run()
-		// if err != nil {
-		// 	logrus.Warn("UI error:", err)
-		// }
+		// Get all the incoming results
+		for res := range resultsChan {
+			fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
+		}
 
 		// Wait scans to finish
 		wg.Wait()
+		logrus.Info("Finished all jobs")
 	},
 }
 
-func Execute() {
-	err := rootCmd.Execute()
+func Execute(ctx context.Context) {
+	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
 		os.Exit(1)
 	}
