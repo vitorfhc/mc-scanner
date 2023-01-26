@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/vitorfhc/mc-scanner/mclog"
 	"github.com/vitorfhc/mc-scanner/mcscanner"
 )
 
@@ -19,23 +17,29 @@ var rootCmd = &cobra.Command{
 All you need is a list of available addresses in the format <address>:<port>.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Initialize logger
-		logger, err := mclog.New()
-		if err != nil {
-			logrus.Fatalf("Could not setup logger: %s\n", err)
-		}
+		// dir, err := os.MkdirTemp("", "mc-scanner-*")
+		// if err != nil {
+		// 	logrus.Fatal(err)
+		// }
+		// logFile := path.Join(dir, "scan.log")
 
-		// Enable debug mode
+		// logWriter, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0400)
+		// if err != nil {
+		// 	logrus.Fatal(err)
+		// }
+		// defer logWriter.Close()
+
 		if GlobalCliParams.Debug {
-			logger.Debug("Debug mode is activated")
-			logger.SetLevel(logrus.DebugLevel)
+			logrus.Debug("Debug mode is activated")
+			logrus.SetLevel(logrus.DebugLevel)
 		}
 
 		// Open the file with addresses
 		filename := GlobalCliParams.AddrListFile
-		logger.Debugf("Opening file %q\n", filename)
+		logrus.Debugf("Opening file %q\n", filename)
 		file, err := os.Open(filename)
 		if err != nil {
-			logger.Fatalf("Could not open file %q: %s\n", filename, err)
+			logrus.Fatalf("Could not open file %q: %s\n", filename, err)
 		}
 		defer file.Close()
 
@@ -47,7 +51,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.Debug("Starting to populate the input channel")
+			logrus.Debug("Starting to populate the input channel")
 			for scanner.Scan() {
 				addrsChan <- scanner.Text()
 			}
@@ -66,15 +70,21 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.Debug("Starting scanner")
+			logrus.Debug("Starting scanner")
 			mcscanner.RunScanJobs(options)
 			close(resultsChan)
 		}()
 
-		// Get all the incoming results
-		for res := range resultsChan {
-			fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
-		}
+		// // Get all the incoming results
+		// for res := range resultsChan {
+		// 	fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
+		// }
+
+		// logrus.SetOutput(logWriter)
+		// err = gui.Run()
+		// if err != nil {
+		// 	logrus.Warn("UI error:", err)
+		// }
 
 		// Wait scans to finish
 		wg.Wait()
