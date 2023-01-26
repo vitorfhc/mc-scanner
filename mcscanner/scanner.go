@@ -10,22 +10,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func RunAsyncScannerController(options Options) {
-	errors := 0
-	success := 0
-
+func RunScanJobs(options Options) {
 	var wg sync.WaitGroup
-
-	go func() {
-		for {
-			logrus.Infof("Processed:\t%d\n", errors+success)
-			logrus.Infof("Error:\t%d\n", errors)
-			logrus.Infof("Success:\t%d\n", success)
-			time.Sleep(2 * time.Second)
-		}
-	}()
-
 	limit := make(chan bool, options.MaxJobs)
+	logrus.Debug("RunScanJobs MaxJobs = ", options.MaxJobs)
 
 	for addr := range options.InputChan {
 		limit <- true
@@ -36,17 +24,15 @@ func RunAsyncScannerController(options Options) {
 
 			bgCtx := context.Background()
 			timeoutDuration := time.Duration(options.Timeout) * time.Second
-			ctx, cancel := context.WithTimeout(bgCtx, timeoutDuration)
+			scanCtx, cancel := context.WithTimeout(bgCtx, timeoutDuration)
 			defer cancel()
 
-			res, err := ScanAddress(ctx, scanAddr)
+			logrus.Debugf("Scanning address %q\n", scanAddr)
+			res, err := ScanAddress(scanCtx, scanAddr)
 			if err != nil {
-				// logrus.Errorf("Error on address %q: %v\n", scanAddr, err)
-				errors++
+				logrus.Warnf("Server %q error: %s\n", scanAddr, err)
 				return
 			}
-			success++
-
 			options.ResultsChan <- res
 		}(addr)
 	}

@@ -25,9 +25,10 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 
 		// Open the file with addresses
 		filename := GlobalCliParams.AddrListFile
+		logrus.Debugf("Opening file %q\n", filename)
 		file, err := os.Open(filename)
 		if err != nil {
-			logrus.Fatalf("Could not open file %q: %v\n", filename, err)
+			logrus.Fatalf("Could not open file %q: %s\n", filename, err)
 		}
 		defer file.Close()
 
@@ -39,6 +40,7 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			logrus.Debug("Starting to populate the input channel")
 			for scanner.Scan() {
 				addrsChan <- scanner.Text()
 			}
@@ -57,8 +59,8 @@ All you need is a list of available addresses in the format <address>:<port>.`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logrus.Info("Starting scanner")
-			mcscanner.RunAsyncScannerController(options)
+			logrus.Debug("Starting scanner")
+			mcscanner.RunScanJobs(options)
 			close(resultsChan)
 		}()
 
