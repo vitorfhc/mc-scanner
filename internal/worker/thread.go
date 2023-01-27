@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Tnze/go-mc/bot"
-	"github.com/sirupsen/logrus"
 	"github.com/vitorfhc/mc-scanner/internal/api"
 	"github.com/vitorfhc/mc-scanner/internal/controller"
 )
@@ -23,10 +22,8 @@ func (tw *threadWorker) Run(ctx context.Context, wo *controller.WorkerOptions) {
 		case <-ctx.Done():
 			return
 		case input := <-wo.Inputs:
-			logrus.Debug(input)
 			output, err := scan(input, wo.RequestTimeout)
 			if err == nil {
-				logrus.Debug(output)
 				wo.Outputs <- output
 			}
 		default:
@@ -36,7 +33,6 @@ func (tw *threadWorker) Run(ctx context.Context, wo *controller.WorkerOptions) {
 }
 
 func scan(addr string, timeout int) (*api.PingAndListResponse, error) {
-	logrus.Debug(addr)
 	to := time.Duration(timeout) * time.Second
 	bytes, _, err := bot.PingAndListTimeout(addr, to)
 	if err != nil {

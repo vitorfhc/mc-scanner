@@ -12,10 +12,13 @@ func readFileToChan(ctx context.Context, file *os.File, c chan string) {
 	scanner := bufio.NewScanner(file)
 	logrus.Info("starting to read addresses")
 	for scanner.Scan() {
-		if _, ok := <-ctx.Done(); !ok {
+		select {
+		case <-ctx.Done():
+			logrus.Info("stopping to read inputs")
 			return
+		default:
+			c <- scanner.Text()
 		}
-		c <- scanner.Text()
 	}
 	logrus.Info("finished reading input file")
 }
