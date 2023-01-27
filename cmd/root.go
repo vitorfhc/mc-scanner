@@ -104,6 +104,7 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 				case <-workersCtx.Done():
 					return
 				default:
+					time.Sleep(1 * time.Second)
 					continue
 				}
 			}
@@ -120,10 +121,16 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 				select {
 				case <-pctgCtx.Done():
 					return
+				case _, ok := <-ctlr.Outputs():
+					if !ok {
+						return
+					}
 				default:
 					time.Sleep(2 * time.Second)
 					p := float64(ctlr.NumOutputs) / float64(ctlr.NumInputs) * 100
-					logrus.Infof("%d / %d = %.1f\n", ctlr.NumOutputs, ctlr.NumInputs, p)
+					pe := float64(ctlr.NumErrors) / float64(ctlr.NumInputs) * 100
+					logrus.Infof("done: %d / %d = %.1f\n", ctlr.NumOutputs, ctlr.NumInputs, p)
+					logrus.Infof("errors %d / %d = %.1f\n", ctlr.NumErrors, ctlr.NumInputs, pe)
 				}
 			}
 		}()
@@ -146,6 +153,7 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 				case <-checkerCtx.Done(): // Time to leave
 					return
 				default:
+					time.Sleep(500 * time.Millisecond)
 					continue
 				}
 			}

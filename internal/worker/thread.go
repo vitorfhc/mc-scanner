@@ -29,8 +29,11 @@ func (tw *threadWorker) Run(ctx context.Context, wo *controller.WorkerOptions) {
 			wo.Controller.NumOutputs++
 			if err == nil {
 				wo.Outputs <- output
+			} else {
+				wo.Controller.NumErrors++
 			}
 		default:
+			time.Sleep(1 * time.Second)
 			continue
 		}
 	}

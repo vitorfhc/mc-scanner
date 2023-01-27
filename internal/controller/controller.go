@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 )
 
 type controller struct {
@@ -15,6 +16,7 @@ type controller struct {
 	closeOutputsOnce sync.Once
 	NumInputs        int
 	NumOutputs       int
+	NumErrors        int
 }
 
 type ControllerOptions struct {
@@ -106,6 +108,7 @@ func (ctl *controller) RunWorkers(ctx context.Context) error {
 			case <-checkerCtx.Done(): // time to stop the checker
 				return
 			default:
+				time.Sleep(1 * time.Second)
 				continue
 			}
 		}
