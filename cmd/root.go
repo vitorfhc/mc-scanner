@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -57,32 +58,44 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 		// Start sending to the input channel
 		var wg sync.WaitGroup
 		readCtx, cancelRead := context.WithCancel(context.Background())
+		defer cancelRead()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer ctlr.CloseInputs()
 			readFileToChan(readCtx, file, ctlr.Inputs())
 		}()
 
 		// Run workers
 		logrus.Info("starting workers")
 		workersCtx, cancelWorkers := context.WithCancel(context.Background())
+		defer cancelWorkers()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer logrus.Info("all workers finished")
+			defer ctlr.CloseOutputs()
 			ctlr.RunWorkers(workersCtx)
 		}()
 
 		// Print output
 		printCtx, cancelPrint := context.WithCancel(context.Background())
+		defer cancelPrint()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer logrus.Info("finished printing outputs")
 			for {
 				select {
 				case <-printCtx.Done():
 					return
-				case output := <-ctlr.Outputs():
-					logrus.Println(output)
+				case output, ok := <-ctlr.Outputs():
+					if !ok {
+						return
+					}
+					fmt.Println(output)
+				case <-workersCtx.Done():
+					return
 				default:
 					continue
 				}
@@ -110,12 +123,6 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 				}
 			}
 		}()
-
-		// Get all the incoming results
-		// logrus.Info("fetching outputs")
-		// for res := range ctlr.Outputs() {
-		// 	fmt.Println(res)
-		// }
 
 		wg.Wait()
 		logrus.Info("all threads stopped")

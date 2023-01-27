@@ -2,11 +2,11 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Tnze/go-mc/bot"
-	"github.com/vitorfhc/mc-scanner/internal/api"
+	"github.com/sirupsen/logrus"
 	"github.com/vitorfhc/mc-scanner/internal/controller"
 )
 
@@ -21,10 +21,14 @@ func (tw *threadWorker) Run(ctx context.Context, wo *controller.WorkerOptions) {
 		select {
 		case <-ctx.Done():
 			return
-		case input := <-wo.Inputs:
+		case input, ok := <-wo.Inputs:
+			if !ok {
+				return
+			}
 			output, err := scan(input, wo.RequestTimeout)
 			if err == nil {
 				wo.Outputs <- output
+			} else {
 			}
 		default:
 			continue
@@ -32,19 +36,20 @@ func (tw *threadWorker) Run(ctx context.Context, wo *controller.WorkerOptions) {
 	}
 }
 
-func scan(addr string, timeout int) (*api.PingAndListResponse, error) {
-	to := time.Duration(timeout) * time.Second
-	bytes, _, err := bot.PingAndListTimeout(addr, to)
+func scan(addr string, timeout int) (string, error) {
+	debugMsg := fmt.Sprintf("scanning address %q:", addr)
+	timeoutDuration := time.Duration(timeout) * time.Second
+	bytes, delay, err := bot.PingAndListTimeout(addr, timeoutDuration)
 	if err != nil {
-		return nil, err
+		debugMsg = fmt.Sprintf("%s error: %s\n", debugMsg, err)
+		logrus.Debug(debugMsg)
+		return "", err
 	}
 
-	res := api.PingAndListResponse{}
-	err = json.Unmarshal(bytes, &res)
-	if err != nil {
-		return nil, err
-	}
-	res.Address = addr
+	debugMsg = fmt.Sprintf("%s success: delay %s\n", debugMsg, delay)
+	logrus.Debug(debugMsg)
 
-	return &res, nil
+	bytesStr := string(bytes)
+	finalOutput := fmt.Sprintf("{\"address\":%q, \"response\":%s}", addr, bytesStr)
+	return finalOutput, nil
 }

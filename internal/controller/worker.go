@@ -2,14 +2,12 @@ package controller
 
 import (
 	"context"
-
-	"github.com/vitorfhc/mc-scanner/internal/api"
 )
 
 type WorkerOptions struct {
 	RequestTimeout int
 	Inputs         chan string
-	Outputs        chan *api.PingAndListResponse
+	Outputs        chan string
 }
 
 type Worker interface {

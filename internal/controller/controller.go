@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"sync"
-
-	"github.com/vitorfhc/mc-scanner/internal/api"
 )
 
 type controller struct {
 	inputs           chan string
-	outputs          chan *api.PingAndListResponse
+	outputs          chan string
 	options          *ControllerOptions
 	workers          []Worker
 	closeInputsOnce  sync.Once
@@ -26,8 +24,8 @@ func New() *controller {
 	defaultMaxWorkers := 10
 
 	ctl := &controller{
-		inputs:  make(chan string, 1000),
-		outputs: make(chan *api.PingAndListResponse, 1000),
+		inputs:  make(chan string, 1000), // TODO: review this hardcoded 1000
+		outputs: make(chan string, 1000),
 		workers: make([]Worker, 0, defaultMaxWorkers),
 		options: &ControllerOptions{
 			RequestTimeout:       10,
@@ -41,7 +39,7 @@ func New() *controller {
 func NewWithOptions(options *ControllerOptions) *controller {
 	ctl := &controller{
 		inputs:  make(chan string, 1000),
-		outputs: make(chan *api.PingAndListResponse, 1000),
+		outputs: make(chan string, 1000),
 		workers: make([]Worker, 0, options.MaxConcurrentWorkers),
 		options: options,
 	}
@@ -49,7 +47,7 @@ func NewWithOptions(options *ControllerOptions) *controller {
 	return ctl
 }
 
-func (ctlr *controller) Outputs() chan *api.PingAndListResponse {
+func (ctlr *controller) Outputs() chan string {
 	return ctlr.outputs
 }
 
