@@ -1,11 +1,4 @@
-package mcscanner
-
-type Options struct {
-	InputChan   chan string
-	ResultsChan chan *PingAndListResponse
-	Timeout     int
-	MaxJobs     int
-}
+package api
 
 type PingAndListResponse struct {
 	Address     string

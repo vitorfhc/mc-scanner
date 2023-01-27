@@ -1,87 +1,127 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
-	"fmt"
+	"log"
 	"os"
 	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/vitorfhc/mc-scanner/mcscanner"
+	"github.com/vitorfhc/mc-scanner/internal/controller"
+	"github.com/vitorfhc/mc-scanner/internal/worker"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "mc-scanner",
 	Short: "Scan multiple Minecraft servers in seconds",
 	Long: `The mc-scanner scans multiple Minecraft servers async.
-All you need is a list of available addresses in the format <address>:<port>.`,
+All you need is a list of available addresses in the format <address>[:<port>].
+
+Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Initialize logger
 		if GlobalCliParams.Debug {
-			logrus.SetReportCaller(true)
-			logrus.Debug("Debug mode is activated")
+			logrus.SetLevel(logrus.DebugLevel)
+			logrus.Debug("debug mode is enabled")
 			logrus.SetLevel(logrus.DebugLevel)
 		}
 
-		// Open the file with addresses
+		// Open the addresses file
 		filename := GlobalCliParams.AddrListFile
-		logrus.Infof("Opening file %q\n", filename)
+		logrus.Infof("opening file %q\n", filename)
 		file, err := os.Open(filename)
 		if err != nil {
-			logrus.Fatalf("Could not open file %q: %s\n", filename, err)
+			logrus.Fatalf("could not open file %q: %s\n", filename, err)
 		}
 		defer file.Close()
 
-		var wg sync.WaitGroup
-		cmdCtx := cmd.Context()
+		// Setup the controller
+		logrus.Info("setting up controller")
+		ctlr := controller.NewWithOptions(&controller.ControllerOptions{
+			RequestTimeout:       GlobalCliParams.Timeout,
+			MaxConcurrentWorkers: GlobalCliParams.MaxJobs,
+		})
+		defer ctlr.CloseOutputs()
+		defer ctlr.CloseInputs()
 
-		// Create the input and output channel
-		addrsChan := make(chan string)
-		scanner := bufio.NewScanner(file)
+		logrus.Info("registering workers")
+		for i := 0; i < GlobalCliParams.MaxJobs; i++ {
+			threadWorker := worker.New()
+			err := ctlr.RegisterWorker(threadWorker)
+			if err != nil {
+				log.Fatal("error while trying to register workers")
+			}
+		}
+
+		// Start sending to the input channel
+		var wg sync.WaitGroup
+		readCtx, cancelRead := context.WithCancel(context.Background())
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logrus.Info("Reading ", filename)
+			readFileToChan(readCtx, file, ctlr.Inputs())
+		}()
+
+		// Run workers
+		logrus.Info("starting workers")
+		workersCtx, cancelWorkers := context.WithCancel(context.Background())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctlr.RunWorkers(workersCtx)
+		}()
+
+		// Print output
+		printCtx, cancelPrint := context.WithCancel(context.Background())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			for {
 				select {
-				case <-cmdCtx.Done():
-					logrus.Info("Stopping file reading")
-					close(addrsChan) // TODO
+				case <-printCtx.Done():
 					return
+				case output := <-ctlr.Outputs():
+					logrus.Println(output)
 				default:
-					addrsChan <- scanner.Text()
+					continue
 				}
 			}
 		}()
-		resultsChan := make(chan *mcscanner.PingAndListResponse)
 
-		// Set all options for the scanner
-		options := mcscanner.Options{
-			Timeout:     GlobalCliParams.Timeout,
-			MaxJobs:     GlobalCliParams.MaxJobs,
-			InputChan:   addrsChan,
-			ResultsChan: resultsChan,
-		}
-
-		// Run the scans async
-		wg.Add(1)
+		// Run checker for cmd context
+		var checkerWg sync.WaitGroup
+		checkerCtx, cancelChecker := context.WithCancel(context.Background())
+		checkerWg.Add(1)
 		go func() {
-			defer wg.Done()
-			logrus.Info("Starting scanner")
-			mcscanner.RunScanJobs(cmdCtx, options)
-			close(resultsChan)
+			defer checkerWg.Done()
+			for {
+				select {
+				case <-cmd.Context().Done(): // SIGINT or SIGTERM
+					logrus.Info("canceling all jobs")
+					cancelRead()
+					cancelWorkers()
+					cancelPrint()
+					return
+				case <-checkerCtx.Done(): // Time to leave
+					return
+				default:
+					continue
+				}
+			}
 		}()
 
 		// Get all the incoming results
-		for res := range resultsChan {
-			fmt.Printf("%d/%d @ %q @ %q\n", res.Players.Online, res.Players.Max, res.Description.Text, res.Address)
-		}
+		// logrus.Info("fetching outputs")
+		// for res := range ctlr.Outputs() {
+		// 	fmt.Println(res)
+		// }
 
-		// Wait scans to finish
 		wg.Wait()
-		logrus.Info("Finished all jobs")
+		logrus.Info("all threads stopped")
+		cancelChecker()
+		checkerWg.Wait()
+		logrus.Info("finished")
 	},
 }
 

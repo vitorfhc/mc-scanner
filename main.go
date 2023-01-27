@@ -21,9 +21,9 @@ func main() {
 	go func() {
 		<-sigChan
 		cancel()
-		logrus.Info("Trying to stop gracefully")
+		logrus.Info("trying to stop gracefully - waiting 10 seconds")
 		time.Sleep(10 * time.Second)
-		logrus.Error("Unable to stop gracefully")
+		logrus.Error("unable to stop gracefully")
 		os.Exit(1)
 	}()
 
