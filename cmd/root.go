@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -56,6 +57,12 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 		}
 
 		// Start sending to the input channel
+		linesCount, err := lineCounter(file)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		file.Seek(0, 0)
+		ctlr.NumInputs = linesCount
 		var wg sync.WaitGroup
 		readCtx, cancelRead := context.WithCancel(context.Background())
 		defer cancelRead()
@@ -73,8 +80,8 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer logrus.Info("all workers finished")
 			defer ctlr.CloseOutputs()
+			defer logrus.Info("all workers finished")
 			ctlr.RunWorkers(workersCtx)
 		}()
 
@@ -102,6 +109,25 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 			}
 		}()
 
+		// Run percentager
+		wg.Add(1)
+		pctgCtx, cancelPctg := context.WithCancel(context.Background())
+		defer cancelPctg()
+		go func() {
+			defer wg.Done()
+			defer logrus.Info("stopped printing status")
+			for {
+				select {
+				case <-pctgCtx.Done():
+					return
+				default:
+					time.Sleep(2 * time.Second)
+					p := float64(ctlr.NumOutputs) / float64(ctlr.NumInputs) * 100
+					logrus.Infof("%d / %d = %.1f\n", ctlr.NumOutputs, ctlr.NumInputs, p)
+				}
+			}
+		}()
+
 		// Run checker for cmd context
 		var checkerWg sync.WaitGroup
 		checkerCtx, cancelChecker := context.WithCancel(context.Background())
@@ -115,6 +141,7 @@ Built by Vitor Falcão <vitorfhc@protonmail.com>`,
 					cancelRead()
 					cancelWorkers()
 					cancelPrint()
+					cancelPctg()
 					return
 				case <-checkerCtx.Done(): // Time to leave
 					return

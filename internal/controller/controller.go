@@ -13,6 +13,8 @@ type controller struct {
 	workers          []Worker
 	closeInputsOnce  sync.Once
 	closeOutputsOnce sync.Once
+	NumInputs        int
+	NumOutputs       int
 }
 
 type ControllerOptions struct {
@@ -133,6 +135,7 @@ func (ctlr *controller) buildWorkerOptions() *WorkerOptions {
 		RequestTimeout: ctlr.options.RequestTimeout,
 		Inputs:         ctlr.inputs,
 		Outputs:        ctlr.outputs,
+		Controller:     ctlr,
 	}
 
 	return wo

@@ -26,9 +26,9 @@ func (tw *threadWorker) Run(ctx context.Context, wo *controller.WorkerOptions) {
 				return
 			}
 			output, err := scan(input, wo.RequestTimeout)
+			wo.Controller.NumOutputs++
 			if err == nil {
 				wo.Outputs <- output
-			} else {
 			}
 		default:
 			continue
